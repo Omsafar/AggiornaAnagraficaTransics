@@ -11,6 +11,8 @@ using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
 using Paratori.SyncTransics.TxTango;
 using TxTango; // proxy SOAP generato da svcutil
+using System.Net;
+using System.Net.Mail;
 
 namespace Paratori.SyncTransics
 {
@@ -20,6 +22,7 @@ namespace Paratori.SyncTransics
             "Server=192.168.1.24\\sgam;Database=PARATORI;User Id=sapara;Password=S@p4ra;Encrypt=True;TrustServerCertificate=True;";
         private static readonly TimeSpan ApiCooldown = TimeSpan.FromSeconds(3);
         private static DateTime _lastApiCallUtc = DateTime.MinValue;
+        private static readonly List<string> _changes = new();
 
         public static async Task Main(string[] args)
         {
@@ -155,10 +158,13 @@ namespace Paratori.SyncTransics
                 }
 
                 LogHelper.Log("=== Sincronizzazione completata ===");
+                if (_changes.Count > 0)
+                    SendSummaryEmail("Modifiche eseguite:\n" + string.Join("\n", _changes));
             }
             catch (Exception ex)
             {
                 LogHelper.LogException(ex);
+                SendErrorEmail(ex);
             }
         }
 
@@ -182,6 +188,7 @@ namespace Paratori.SyncTransics
             };
             var res = await TransicsService.Client.Update_Vehicle_V2Async(TransicsService.Login, upd);
             LogHelper.LogOutcome($"DISATTIVA {code}", res);
+            RecordChange($"Disattivato veicolo {code}");
         }
         /// <summary>
         /// Crea un nuovo veicolo in Transics, impostando CompanyCard e FuelType nel blocco TechnicalInfo.
@@ -216,6 +223,7 @@ namespace Paratori.SyncTransics
 
             // 5) Logga l’esito
             LogHelper.LogOutcome($"CREA {g.Codice}", res);
+            RecordChange($"Creato veicolo {g.Codice} targa {g.Targa}");
         }
 
 
@@ -234,6 +242,7 @@ namespace Paratori.SyncTransics
             await WaitCooldown();
             var res = await TransicsService.Client.Update_Vehicle_V2Async(TransicsService.Login, upd);
             LogHelper.LogOutcome($"UPDATE {g.Codice}", res);
+            RecordChange($"Aggiornato veicolo {g.Codice} targa {g.Targa}");
         }
         // CRUD Transics by internal ID
         private static async Task UpdateById(long id, bool inactive)
@@ -252,6 +261,7 @@ namespace Paratori.SyncTransics
             var res = await TransicsService.Client.Update_Vehicle_V2Async(TransicsService.Login, upd);
             var act = inactive ? "DISATTIVA" : "ATTIVA";
             LogHelper.LogOutcome($"{act} ID={id}", res);
+            RecordChange($"{act} veicolo ID={id}");
         }
 
         // DB
@@ -311,6 +321,34 @@ namespace Paratori.SyncTransics
                     return null;
 
             }
+        }
+
+        private static void RecordChange(string msg) => _changes.Add(msg);
+
+        private static void SendSummaryEmail(string body)
+        {
+            using var message = new MailMessage();
+            message.From = new MailAddress("AnagraficaTransics@paratorispa.it");
+            message.To.Add("omar.tagliabue@paratorispa.it");
+            message.Subject = "AggiornaAnagraficaGolia - Modifiche eseguite";
+            message.Body = body;
+
+            using var smtp = new SmtpClient("192.168.1.11");
+            smtp.Credentials = new NetworkCredential("scanner@paraspa.local", "],M4`V~8q967");
+            smtp.Send(message);
+        }
+
+        private static void SendErrorEmail(Exception ex)
+        {
+            using var message = new MailMessage();
+            message.From = new MailAddress("AnagraficaTransics@paratorispa.it");
+            message.To.Add("omar.tagliabue@paratorispa.it");
+            message.Subject = "Errore AggiornaAnagraficaGolia";
+            message.Body = ex.ToString();
+
+            using var smtp = new SmtpClient("192.168.1.11");
+            smtp.Credentials = new NetworkCredential("scanner@paraspa.local", "],M4`V~8q967");
+            smtp.Send(message);
         }
 
 
