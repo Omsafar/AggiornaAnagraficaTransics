@@ -9,6 +9,7 @@ using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
+using System.IO;
 using Paratori.SyncTransics.TxTango;
 using TxTango; // proxy SOAP generato da svcutil
 using System.Net;
@@ -35,24 +36,24 @@ namespace Paratori.SyncTransics
                 var gestList = LoadGestionale(oggi)
                     .OrderBy(v => v.Codice)
                     .ToList();
-                Console.WriteLine("Veicoli recuperati dal gestionale:");
+                LogHelper.Log("Veicoli recuperati dal gestionale:");
                 foreach (var v in gestList)
-                    Console.WriteLine($"  • Codice: {v.Codice}, Targa: {v.Targa}, Vettore: {v.Vettore}");
-                Console.WriteLine($"Totale veicoli: {gestList.Count}\n");
+                    LogHelper.Log($"  • Codice: {v.Codice}, Targa: {v.Targa}, Vettore: {v.Vettore}");
+                LogHelper.Log($"Totale veicoli: {gestList.Count}\n");
 
                 var gestDuplicati = gestList
                     .GroupBy(v => v.Codice, StringComparer.OrdinalIgnoreCase)
                     .Where(g => g.Count() > 1);
                 if (gestDuplicati.Any())
                 {
-                    Console.WriteLine("❗ Duplicati in gestionale:");
+                    LogHelper.Log("❗ Duplicati in gestionale:");
                     foreach (var g in gestDuplicati)
                     {
-                        Console.WriteLine($"  • '{g.Key}' x{g.Count()} volte:");
+                        LogHelper.Log($"  • '{g.Key}' x{g.Count()} volte:");
                         foreach (var vv in g)
-                            Console.WriteLine($"     – Targa: {vv.Targa}, Vettore: {vv.Vettore}");
+                            LogHelper.Log($"     – Targa: {vv.Targa}, Vettore: {vv.Vettore}");
                     }
-                    Console.WriteLine();
+                    LogHelper.Log(string.Empty);
                 }
                 var gestVeicoli = gestList
                     .GroupBy(v => v.Codice, StringComparer.OrdinalIgnoreCase)
@@ -171,10 +172,8 @@ namespace Paratori.SyncTransics
         // Helper interattivo
         private static bool AskConfirmation(string action, string details)
         {
-            Console.WriteLine($">>> {action}");
-            Console.WriteLine(details);
-            Console.Write("Confermi? (S/N): ");
-            return Console.ReadLine()?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true;
+            LogHelper.Log($">>> {action}\n{details}\nConferma automatica");
+            return true;
         }
 
         // CRUD Transics by code
@@ -364,12 +363,24 @@ namespace Paratori.SyncTransics
     // Logging
     internal static class LogHelper
     {
-        public static void Log(string msg)
-            => Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {msg}");
-        public static void LogException(Exception ex)
-            => Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] ERRORE: {ex}");
+        private static readonly string LogPath = System.IO.Path.Combine(AppContext.BaseDirectory, "log.txt");
+
+        static LogHelper()
+        {
+            if (!File.Exists(LogPath))
+                File.WriteAllText(LogPath, string.Empty);
+        }
+
+        public static void Log(string msg) => Write($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {msg}");
+        public static void LogException(Exception ex) => Write($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] ERRORE: {ex}");
         public static void LogOutcome(string ctx, ResultInfo res)
-            => Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ctx}: {(res?.Errors?.Length > 0 ? $"ERROR {res.Errors[0].ErrorCode}" : "OK")}");
+            => Write($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ctx}: {(res?.Errors?.Length > 0 ? $"ERROR {res.Errors[0].ErrorCode}" : "OK")}");
+
+        private static void Write(string line)
+        {
+            try { File.AppendAllText(LogPath, line + Environment.NewLine); } catch { /* ignore */ }
+            Console.WriteLine(line);
+        }
     }
 
     // Extension TransicsService
