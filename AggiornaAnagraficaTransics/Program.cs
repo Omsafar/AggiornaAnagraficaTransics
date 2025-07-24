@@ -262,6 +262,7 @@ namespace Paratori.SyncTransics
             cmd.Parameters.AddWithValue("@Tipo", 0);
             cmd.Parameters.AddWithValue("@MostraTabella", 1);
             cmd.Parameters.AddWithValue("@Data", giorno.ToString("yyyyMMdd"));
+            cmd.Parameters.AddWithValue("@Alienati", "N");
             conn.Open();
             using var rd = cmd.ExecuteReader();
             while (rd.Read())
